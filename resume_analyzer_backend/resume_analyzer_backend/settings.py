@@ -9,9 +9,17 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-
+import cloudinary # type: ignore
+import cloudinary.uploader # type: ignore
+import cloudinary.api # type: ignore
 import os
 from pathlib import Path
+from dotenv import load_dotenv # type: ignore
+
+# Load environment variables from .env file
+load_dotenv()
+
+import dj_database_url # type: ignore
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,14 +29,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-mfkl4xrqbe#huudem9mp1clyh-m4=ete$zn^gp=x=wo2)yk-ep'
+# # SECURITY WARNING: keep the secret key used in production secret!
+# SECRET_KEY = 'django-insecure-mfkl4xrqbe#huudem9mp1clyh-m4=ete$zn^gp=x=wo2)yk-ep'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# # SECURITY WARNING: don't run with debug turned on in production!
+# DEBUG = True
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = []
 
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+DEBUG = os.getenv("DEBUG", "False") == "True"  # Convert string to boolean
+
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 # Application definition
 
@@ -42,6 +55,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'resume',
     'rest_framework',
+    'cloudinary',
+    'cloudinary_storage',
     
 ]
 
@@ -81,19 +96,35 @@ TEMPLATES = [
     },
 ]
 
+ASGI_APPLICATION = "resume_analyzer_backend.asgi.application"
+
+
 WSGI_APPLICATION = 'resume_analyzer_backend.wsgi.application'
 
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Get the DATABASE_URL from .env or fallback to a default
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=True)
     }
+else:
+    raise ValueError("❌ DATABASE_URL is not set! Check your .env file.")
+
+# ===================================================================
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.getenv("CLOUDINARY_CLOUD_NAME"),
+    'API_KEY': os.getenv("CLOUDINARY_API_KEY"),
+    'API_SECRET': os.getenv("CLOUDINARY_API_SECRET"),
+    'RESOURCE_TYPE': 'raw',  # Allows uploading non-image files like PDFs
 }
 
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -119,8 +150,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # MEDIA_ROOT = BASE_DIR / 'media'
 
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# MEDIA_URL = '/media/'
+# MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
@@ -136,11 +167,19 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
+# ✅ Static Files
+STATIC_URL = "/static/"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")  # Required for production
 
-STATIC_URL = 'static/'
+
+# ✅ Security Settings
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+import os
+PORT = os.getenv("PORT", "10000")  # Default to 8000 if not set

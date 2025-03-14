@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import CircularProgress from '@mui/material/CircularProgress';
 
 import {
   Container,
@@ -26,7 +27,6 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import TableChartIcon from "@mui/icons-material/TableChart";
-
 
 const COLORS = ["#0088FE", "#00C49F"];
 
@@ -66,24 +66,37 @@ const ResumeDashboard = () => {
     }
   };
 
-  const handleDownload = (filePath) => {
-    const cleanPath = filePath.replace(/^media\//, "");
-    const url = `http://127.0.0.1:8000/${cleanPath}`;
-    window.open(url, "_blank");
+  const handleDeleteAll = async () => {
+    if (!window.confirm("Are you sure you want to delete all resumes?")) return;
+    try {
+      await axios.delete("http://127.0.0.1:8000/api/resumes/delete_all/");
+      setResumes([]);
+      console.log("🗑️ All resumes deleted");
+    } catch (error) {
+      console.error("❌ Error deleting all resumes:", error);
+    }
   };
 
+  // const handleDownload = (filePath) => {
+  //   const cleanPath = filePath.replace(/^media\//, "");
+  //   const url = `http://127.0.0.1:8000/${cleanPath}`;
+  //   window.open(url, "_blank");
+  // };
 
-
-
-    const handleDownloadExcel = () => {
-      window.open("http://127.0.0.1:8000/api/report/excel/", "_blank");
-    };
+  const handleDownload = (fileUrl) => {
+    const modifiedUrl = `${fileUrl}?fl_attachment=true`;  // Forces download instead of preview
+    window.open(modifiedUrl, "_blank");
+  };
   
-    const handleDownloadPDF = () => {
-      window.open("http://127.0.0.1:8000/api/report/pdf/", "_blank");
-    };
+  
 
+  const handleDownloadExcel = () => {
+    window.open("http://127.0.0.1:8000/api/report/excel/", "_blank");
+  };
 
+  const handleDownloadPDF = () => {
+    window.open("http://127.0.0.1:8000/api/report/pdf/", "_blank");
+  };
 
   // ✅ Filter resumes based on ATS Score, Shortlisted Status & Search Query
   const filteredResumes = resumes.filter((resume) => {
@@ -117,11 +130,65 @@ const ResumeDashboard = () => {
     { name: "Not Shortlisted", value: notShortlistedCount },
   ];
 
+
+
+   // Return loading state if data is being fetched
+   if (loading) {
+    return (
+      <Container maxWidth="xl" sx={{ width: "100%", marginTop: "20px", overflowX: "auto" }}>
+        <Typography variant="h4" align="center" gutterBottom color="primary" fontWeight="bold">
+          Resume Dashboard
+        </Typography>
+        <Grid container justifyContent="center" sx={{ marginTop: "20px" }}>
+          <CircularProgress />
+        </Grid>
+      </Container>
+    );
+  }
+
+  // Return error state if there was an issue fetching the data
+  if (error) {
+    return (
+      <Container maxWidth="xl" sx={{ width: "100%", marginTop: "20px", overflowX: "auto" }}>
+        <Typography variant="h4" align="center" gutterBottom color="primary" fontWeight="bold">
+          Resume Dashboard
+        </Typography>
+        <Grid container justifyContent="center" sx={{ marginTop: "20px" }}>
+          <Typography variant="h6" color="error">
+            {error}
+          </Typography>
+        </Grid>
+      </Container>
+    );
+  }
+
+
+
   return (
     <Container maxWidth="xl" sx={{ width: "100%", marginTop: "20px", overflowX: "auto" }}>
-      <Typography variant="h4" align="center" gutterBottom>
+      <Typography variant="h4" align="center" gutterBottom color="primary" fontWeight="bold">
         Resume Dashboard
       </Typography>
+
+      {/* ✅ Delete All Button */}
+      <Grid container justifyContent="center" sx={{ marginBottom: "20px" }}>
+        <Grid item>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteAll}
+            startIcon={<DeleteIcon />}
+            sx={{
+              padding: "12px 24px",
+              borderRadius: "8px",
+              boxShadow: 3,
+              "&:hover": { backgroundColor: "#e53935" },
+            }}
+          >
+            Delete All Resumes
+          </Button>
+        </Grid>
+      </Grid>
 
       {/* ✅ Filters */}
       <Grid container spacing={2}>
@@ -132,6 +199,9 @@ const ResumeDashboard = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             margin="normal"
+            sx={{
+              "& .MuiOutlinedInput-root": { borderRadius: "8px" },
+            }}
           />
         </Grid>
         <Grid item xs={12} md={4}>
@@ -142,12 +212,22 @@ const ResumeDashboard = () => {
             value={filterScore}
             onChange={(e) => setFilterScore(Number(e.target.value) || 0)}
             margin="normal"
+            sx={{
+              "& .MuiOutlinedInput-root": { borderRadius: "8px" },
+            }}
           />
         </Grid>
         <Grid item xs={12} md={4}>
           <FormControl fullWidth margin="normal">
             <InputLabel>Filter by Shortlisted</InputLabel>
-            <Select value={shortlistFilter} onChange={(e) => setShortlistFilter(e.target.value)}>
+            <Select
+              value={shortlistFilter}
+              onChange={(e) => setShortlistFilter(e.target.value)}
+              sx={{
+                "& .MuiOutlinedInput-root": { borderRadius: "8px" },
+                "& .MuiSelect-icon": { color: "primary.main" },
+              }}
+            >
               <MenuItem value="all">All Resumes</MenuItem>
               <MenuItem value="yes">Shortlisted Only</MenuItem>
               <MenuItem value="no">Not Shortlisted</MenuItem>
@@ -159,9 +239,9 @@ const ResumeDashboard = () => {
       {/* ✅ Charts */}
       <Grid container spacing={3} sx={{ marginTop: "20px" }}>
         <Grid item xs={12} md={6}>
-          <Card sx={{ width: "100%" }}>
+          <Card sx={{ width: "100%", boxShadow: 3, borderRadius: "12px" }}>
             <CardContent>
-              <Typography variant="h6" align="center">
+              <Typography variant="h6" align="center" color="primary" fontWeight="bold">
                 ATS Score Distribution
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
@@ -177,9 +257,9 @@ const ResumeDashboard = () => {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Card sx={{ width: "100%" }}>
+          <Card sx={{ width: "100%", boxShadow: 3, borderRadius: "12px" }}>
             <CardContent>
-              <Typography variant="h6" align="center">
+              <Typography variant="h6" align="center" color="primary" fontWeight="bold">
                 Shortlisted Candidates
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
@@ -222,31 +302,31 @@ const ResumeDashboard = () => {
                 <TableCell>{resume.phone_number || "Not Found"}</TableCell>
                 <TableCell>{resume.shortlisted ? "✅ Yes" : "❌ No"}</TableCell>
                 <TableCell>
-                    <Button onClick={() => handleDownload(resume.resume_file)}><DownloadIcon /></Button>
-                    <Button onClick={() => handleDelete(resume.id)} color="error"><DeleteIcon /></Button>
-                  </TableCell>
+                  <Button onClick={() => handleDownload(resume.resume_file)}><DownloadIcon /></Button>
+                  <Button onClick={() => handleDelete(resume.id)} color="error"><DeleteIcon /></Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
-      <br />
-      <br />
-      <Grid container spacing={10} justifyContent="center" sx={{ marginBottom: "70px" }}>
-      <Grid item>
-        <Button variant="contained" color="primary" onClick={handleDownloadExcel} startIcon={<TableChartIcon />}>
-          Download Excel
-        </Button>
-      </Grid>
-      <Grid item>
-        <Button variant="contained" color="secondary" onClick={handleDownloadPDF} startIcon={<PictureAsPdfIcon />}>
-          Download PDF
-        </Button>
-      </Grid>
-    </Grid>
-    </Container>
 
-    
+      <br />
+      <br />
+
+      <Grid container spacing={10} justifyContent="center" sx={{ marginBottom: "70px" }}>
+        <Grid item>
+          <Button variant="contained" color="primary" onClick={handleDownloadExcel} startIcon={<TableChartIcon />}>
+            Download Excel
+          </Button>
+        </Grid>
+        <Grid item>
+          <Button variant="contained" color="secondary" onClick={handleDownloadPDF} startIcon={<PictureAsPdfIcon />}>
+            Download PDF
+          </Button>
+        </Grid>
+      </Grid>
+    </Container>
   );
 };
 

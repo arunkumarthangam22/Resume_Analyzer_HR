@@ -3,7 +3,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from .views import (
-    ResumeUploadView,analyze_resume_combined, get_resumes,delete_resume,
+    ResumeUploadView,analyze_resume_combined, get_resumes,delete_resume,delete_all_resumes,
     get_shortlisted_candidates, set_ats_threshold, generate_pdf_report, generate_excel_report,ResumeListView
 )
 
@@ -25,6 +25,8 @@ urlpatterns = [
 
 
     path('resumes/<int:resume_id>/delete/', delete_resume, name='delete-resume'),
+
+    path('resumes/delete_all/', delete_all_resumes, name='delete_all_resumes'),
     
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

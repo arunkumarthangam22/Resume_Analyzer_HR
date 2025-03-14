@@ -2,6 +2,8 @@ import os
 import json
 import pandas as pd
 from io import BytesIO
+import re
+import cloudinary.uploader  # ✅ Import Cloudinary uploader
 from django.views import View
 from django.db import connection
 from django.core.files.storage import default_storage
@@ -28,7 +30,6 @@ from resume.models import Resume, HRSettings
 from .serializers import ResumeSerializer
 from .utils import compute_ats_score, extract_text, extract_email_and_phone
 
-
 # ✅ Allowed file types
 ALLOWED_EXTENSIONS = [".pdf", ".docx"]
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
@@ -46,15 +47,30 @@ class ResumeUploadView(APIView):
             uploaded_resumes = []  # ✅ Store results for each file
 
             for file_obj in files:
-                print("✅ Processing file:", file_obj.name)
+                print("✅ Uploading file:", file_obj.name)
 
-                # ✅ Save the file
-                file_path = default_storage.save(f"resumes/{file_obj.name}", file_obj)
-                full_file_path = os.path.join(default_storage.location, file_path)
-                print("📂 File saved at:", full_file_path)
+                # ✅ Upload file to Cloudinary (store as raw file)
+                cloudinary_response = cloudinary.uploader.upload(
+                        file_obj,
+                        resource_type="raw",  # Ensures Cloudinary treats it as a document
+                        folder="resumes/",
+                        use_filename=True,  
+                        unique_filename=False, 
+                        overwrite=True,  
+                        access_mode="public",
+                        format="pdf"  # Explicitly set format to PDF
+                    )
+
+
+                cloudinary_url = cloudinary_response.get("url")
+                if not cloudinary_url:
+                    return Response({"error": f"Failed to upload {file_obj.name} to Cloudinary"},
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                print("📂 File stored at:", cloudinary_url)
 
                 # ✅ Extract text from resume
-                resume_text = extract_text(full_file_path)
+                resume_text = extract_text(file_obj)
                 if not resume_text:
                     return Response({"error": f"Failed to extract text from {file_obj.name}"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -81,9 +97,9 @@ class ResumeUploadView(APIView):
                 # ✅ Determine Shortlisting Status
                 is_shortlisted = ats_score["final_ats_score"] >= ats_threshold
 
-                # ✅ Save resume to the database
+                # ✅ Save resume to the database (store Cloudinary URL)
                 resume_instance = Resume.objects.create(
-                    resume_file=file_path,
+                    resume_file=cloudinary_url,  # Store Cloudinary URL instead of file path
                     extracted_text=resume_text,
                     email=email,
                     phone_number=phone_number,
@@ -96,6 +112,7 @@ class ResumeUploadView(APIView):
                 uploaded_resumes.append({
                     "resume_id": resume_instance.id,
                     "file_name": file_obj.name,
+                    "resume_url": cloudinary_url,
                     "ats_score": ats_score["final_ats_score"],
                     "email": email,
                     "phone_number": phone_number,
@@ -359,6 +376,8 @@ def generate_excel_report(request):
 
     # ✅ Convert "Shortlisted" column to Yes/No
     df["Shortlisted"] = df["Shortlisted"].apply(lambda x: "✅ Yes" if x else "❌ No")
+    
+    df["ATS Score (%)"] = df["ATS Score (%)"] / 100
 
     buffer = BytesIO()
 
@@ -399,6 +418,9 @@ def generate_excel_report(request):
     response["Content-Disposition"] = 'attachment; filename="resumes.xlsx"'
 
     return response
+
+
+
 
 from django.http import FileResponse
 from io import BytesIO
@@ -485,14 +507,55 @@ def generate_pdf_report(request):
 
 @api_view(['DELETE'])
 def delete_resume(request, resume_id):
-    """Deletes a specific resume by ID."""
+    """Deletes a specific resume by ID and removes it from Cloudinary."""
     try:
         resume = Resume.objects.get(id=resume_id)
+
+        # ✅ Extract Cloudinary Public ID from the URL
+        cloudinary_url = resume.resume_file.url  # Get Cloudinary URL
+        match = re.search(r"resumes/(.*)\..*$", cloudinary_url)  # Extract public_id
+        if match:
+            public_id = f"resumes/{match.group(1)}"
+            
+            # ✅ Force immediate deletion using `invalidate=True`
+            cloudinary.uploader.destroy(public_id, resource_type="raw", invalidate=True)
+            print(f"🗑️ Force deleted from Cloudinary: {public_id}")
+        else:
+            print("⚠️ Failed to extract public_id from Cloudinary URL")
+
+        # ✅ Delete from the database
         resume.delete()
         return Response({"message": "Resume deleted successfully"}, status=status.HTTP_200_OK)
+
     except Resume.DoesNotExist:
         return Response({"error": "Resume not found"}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({"error": f"Internal Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    
 
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Resume
+from rest_framework import status
+
+
+
+
+# ✅ Delete All Resumes (Removes from Cloudinary Too)
+@api_view(['DELETE'])
+def delete_all_resumes(request):
+    """Deletes all resumes and removes them from Cloudinary."""
+    try:
+        resumes = Resume.objects.all()
+
+        for resume in resumes:
+            public_id = resume.resume_file.url.split("/")[-1].split(".")[0]
+            cloudinary.uploader.destroy(f"resumes/{public_id}", resource_type="raw")
+
+        Resume.objects.all().delete()
+        return Response({"message": "All resumes deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
